@@ -36,7 +36,9 @@ Run `marimapper_check_camera` to ensure your camera is compatible with MariMappe
 - HP 4310 (settings may not revert)
 - Logitech C920
 - Dell Latitude 5521 built-in
-- HP Envy x360 built-in 
+- HP Envy x360 built-in
+- iPhone with Camo apps (Desktop and mobile) (settings had failure messages, but it succeeded)
+- Could not get Logitech C930e to focus I think
 - If your camera works, please drop me a line, so I can add it to the list!
 
 </details>
@@ -174,6 +176,37 @@ to grab all the tools you need. Flake8, Black, etc.
 When installing Marimapper, it will adjust your Python packages to the correct versions. 
 If you don't want this, then run it inside a venv.
 If you're worried about library pollution then I assume you know how to use a venv.
+
+### Conda example:
+
+```bash
+conda create -n marimapper python=3.11
+conda activate marimapper
+# Commands run local code edits
+pip install -e .
+```
+
+TODO(jmarnell) - figure out where to put stuff
+```bash
+pip install "marimapper[pixelblaze]" @ git+http://github.com/themariday/marimapper"
+```
+Add doc manual step of uploading .epe, API looks hard unfortch
+Install and set up Camo, pair iPhone.
+Deselect annoying watermark.
+Make sure high framerate?
+
+todo: i think i saw a name match example somewhere...
+```bash
+# maybe need this multiple times
+pip install -e .
+DEBUG_LOGGING=True marimapper_check_camera --device 0
+DEBUG_LOGGING=True marimapper --device 0 --backend pixelblaze --server 192.168.0.95 ~/src/iqe/src/main/resources/binger-bag
+marimapper_upload_to_pixelblaze --server 192.168.0.95 --csv_file $(find ~/src/iqe/src/main/resources/binger-bag -type f | sort | tail -n1)
+```
+
+Add Q quit button
+
+Sigh, I had to futz with Camo a lot, change watermark in and out maybe?
 
 # Feedback
 

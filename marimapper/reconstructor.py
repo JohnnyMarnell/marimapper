@@ -125,7 +125,7 @@ class Reconstructor:
     def enable_and_find_led(self, led_id, debug=False):
 
         # First wait for no leds to be visible
-        # print("Waiting for no leds to be visible")
+        print("Waiting for no leds to be visible")
         while self.find_led(debug) is not None:
             pass
 
