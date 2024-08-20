@@ -165,7 +165,7 @@ Here is an example reconstruction of a test tube of LEDs I have
 
 There's also a tool to turn your 3D scan into a 3D model, run it with `marimapper_remesh my_3d_map.csv`
 
-You can visualise 2D scans with `marimapper_view_2d_scan led_map_2d_0.csv`
+You can visualise 2D scans with `marimapper_view_2d_map --filename led_map_2d_0.csv`
 
 If you want to develop with MariMapper, you can use 
 `pip install "marimapper[develop] @ git+http://github.com/themariday/marimapper"`

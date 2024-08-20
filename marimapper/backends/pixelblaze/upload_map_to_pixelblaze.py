@@ -24,6 +24,12 @@ def read_coordinates_from_csv(csv_file_name):
                 (item for item in list_of_leds if int(item["index"]) == i),
                 {"x": 0, "y": 0, "z": 0},
             )
+
+            if "u" in coords:
+                coords["x"] = coords["u"]
+                coords["y"] = coords["v"]
+                coords["z"] = "0"
+
             final_coordinate_list.append(
                 [float(coords["x"]), float(coords["y"]), float(coords["z"])]
             )

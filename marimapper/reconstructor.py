@@ -59,6 +59,9 @@ class Reconstructor:
 
     def open_live_feed(self):
         cv2.destroyAllWindows()
+
+        time.sleep(2)
+
         self.live_feed_running = True
         self.live_feed = Thread(target=self._live_thread_loop)
         self.live_feed.start()
@@ -71,7 +74,10 @@ class Reconstructor:
 
     def _live_thread_loop(self):
 
-        cv2.namedWindow("MariMapper", cv2.WINDOW_AUTOSIZE)
+        # TODO(jmarnell) - clean up and remove my debug stuff
+        print("temp sleep start")
+        time.sleep(5)
+        print("temp sleep done")
 
         while self.live_feed_running:
 
@@ -83,6 +89,11 @@ class Reconstructor:
             cv2.waitKey(1)
 
         cv2.destroyAllWindows()
+
+    def create_window(self):
+        # self.dark()
+        cv2.namedWindow("MariMapper", cv2.WINDOW_AUTOSIZE)
+        print("prop_viz", cv2.getWindowProperty("MariMapper", cv2.WND_PROP_VISIBLE))
 
     def show_debug(self):
 
@@ -105,13 +116,16 @@ class Reconstructor:
         if debug:
             rendered_image = self.led_finder.draw_results(image, results)
             cv2.imshow("MariMapper", rendered_image)
-            cv2.waitKey(1)
+            key = cv2.waitKey(1)
+            if key != -1:
+                print("key", key)
 
         return results
 
     def enable_and_find_led(self, led_id, debug=False):
 
         # First wait for no leds to be visible
+        # print("Waiting for no leds to be visible")
         while self.find_led(debug) is not None:
             pass
 

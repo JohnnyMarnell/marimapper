@@ -32,6 +32,8 @@ class Scanner:
             width=cli_args.width,
             height=cli_args.height,
         )
+        # self.reconstructor.show_debug()
+        self.reconstructor.create_window()
 
         self.renderer3d = Renderer3D(led_map_3d_queue=self.led_map_3d_queue)
         self.sfm = SFM(
@@ -68,7 +70,9 @@ class Scanner:
             self.reconstructor.light()
             self.reconstructor.open_live_feed()
 
-            start_scan = get_user_confirmation("Start scan? [y/n]: ")
+            # TODO(jmarnell) - make configurable option
+            # start_scan = get_user_confirmation("Start scan? [y/n]: ")
+            start_scan = True
 
             self.reconstructor.close_live_feed()
 

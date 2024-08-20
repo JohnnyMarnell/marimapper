@@ -6,9 +6,23 @@ class Backend:
 
     def __init__(self, pixelblaze_ip="4.3.2.1"):
         self.pb = pixelblaze.Pixelblaze(pixelblaze_ip)
+
+        pattern = [
+            (pid, name)
+            for pid, name in self.pb.getPatternList().items()
+            if "marimapper" in name
+        ]
+
+        assert len(pattern) == 1, "marimapper pattern not found on Pixelblaze"
+
         self.pb.setActivePatternByName(
             "marimapper"
         )  # Need to install marimapper.js to your pixelblaze
+
+        assert (
+            self.pb.getActivePattern() == pattern[0][0]
+        ), "Pixelblaze failed to set pattern"
+        logging.info("Pixelblaze is running marimapper pattern")
 
     def get_led_count(self):
         pixel_count = self.pb.getPixelCount()

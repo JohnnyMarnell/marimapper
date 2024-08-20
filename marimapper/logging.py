@@ -3,6 +3,10 @@
 # my sanity, I've implemented the worlds most basic logging library so that I can at least see something
 # No this isn't multiprocessing "safe" but again, it's something
 
+import os
+
+DEBUG_LOGGING = os.getenv("DEBUG_LOGGING", False)
+
 
 class Col:
     PURPLE = "\033[95m"
@@ -20,7 +24,8 @@ def colorise(string, string_format):
 
 
 def debug(string):
-    pass  # print(colorise(string, Col.BOLD))
+    if DEBUG_LOGGING:
+        print(colorise(string, Col.BOLD))
 
 
 def error(string):
