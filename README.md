@@ -154,6 +154,17 @@ If you want a lot more reading material, run `marimapper` with `-v` to put it in
 This will tell you pretty much everything marimapper is doing under the hood.
 Also good if you're just curious as to why *x* is taking so long!
 
+# Develop Commands
+
+Clone this repo locally (and recursively, with test data), install, and run tests (first time is slower):
+```bash
+git clone --recursive https://github.com/TheMariday/marimapper
+cd marimapper
+uv venv && source .venv/bin/activate
+uv pip install -e '.[develop]'
+uv run pytest
+```
+
 # Feedback
 
 I would really love to hear what you think and if you have any bugs or improvements, please raise them here or drop me a

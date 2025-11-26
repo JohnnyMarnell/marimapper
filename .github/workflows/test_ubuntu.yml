@@ -36,7 +36,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip cache purge
-        pip install .[develop]
+        pip install '.[develop]'
 
     - name: Pytest
       run: |
