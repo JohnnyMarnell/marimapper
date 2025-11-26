@@ -38,16 +38,19 @@ def main():
 
     logger.info("Press ctrl-c to cancel")
 
-    while True:
-        time.sleep(1)
+    try:
+        while True:
+            time.sleep(1)
 
-        logger.info(f"Turning on LED {args.reference_led}")
-        led_backend.set_led(args.reference_led, True)
+            logger.info(f"Turning on LED {args.reference_led}")
+            led_backend.set_led(args.reference_led, True)
 
-        time.sleep(1)
+            time.sleep(1)
 
-        logger.info(f"Turning off LED {args.reference_led}")
-        led_backend.set_led(args.reference_led, False)
+            logger.info(f"Turning off LED {args.reference_led}")
+            led_backend.set_led(args.reference_led, False)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

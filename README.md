@@ -1,3 +1,9 @@
+# j5 TODO:
+- PixelBlaze was unresponsive and no indicaishe, add note to try restarting
+- Mention PB.md has full end to end example (not just PB)
+- Add screensharts
+- Add command examples
+
 ![logo.png](docs/images/logo.png)
 
 [![Supported Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)]()

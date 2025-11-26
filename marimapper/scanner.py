@@ -74,9 +74,15 @@ class Scanner:
             check_movement=check_movement,
         )
 
+        # Start detector so it can initialize backend and report LED count
+        self.detector.start()
+
         self.file_writer = FileWriterProcess(self.output_dir)
 
         existing_leds = get_all_2d_led_maps(self.output_dir)
+
+        # This will block until detector backend reports LED count
+        backend_led_count = self.detector.get_led_count()
 
         led_count = led_end - led_start
 
@@ -87,6 +93,7 @@ class Scanner:
             led_count,
             camera_model_name=camera_model_name,
             camera_fov=60,
+            backend_led_count=backend_led_count,
         )
 
         self.current_view = last_view(existing_leds) + 1
@@ -104,12 +111,11 @@ class Scanner:
         self.sfm.add_output_info_queue(self.detector.get_input_3d_info_queue())
         self.sfm.start()
         self.renderer3d.start()
-        self.detector.start()
         self.file_writer.start()
 
         # we add plus one here as I assume people want to include the last led they define
         self.led_id_range = range(
-            led_start, min(led_end + 1, self.detector.get_led_count())
+            led_start, min(led_end + 1, backend_led_count)
         )
 
         logger.debug("scanner initialised")

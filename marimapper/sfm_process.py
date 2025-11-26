@@ -64,6 +64,7 @@ class SFM(Process):
         led_count: int = 0,
         camera_model_name: str = camera_model_radial.__name__,
         camera_fov: int = 60,
+        backend_led_count: int = 0,
     ):
         super().__init__()
         self._input_queue: Queue2D = Queue2D()
@@ -71,6 +72,7 @@ class SFM(Process):
         self._output_info_queues: list[Queue3DInfo] = []
         self._exit_event = Event()
         self._led_count = led_count
+        self._backend_led_count = backend_led_count
 
         assert camera_model_name in [
             m.__name__ for m in camera_models
@@ -178,9 +180,10 @@ class SFM(Process):
                 sfm_time = end_sfm_time - start_time
                 post_time = end_post_process_time - end_sfm_time
 
+                backend_info = f"backend reported: {self._backend_led_count}, " if self._backend_led_count > 0 else ""
                 print_without_hiding_scan_message(
-                    f"Reconstructed {len(self.leds_3d)} / {self._led_count} in {sfm_time:.2f} seconds "
-                    f"(post process took {post_time:.2f} seconds)"
+                    f"Reconstructed {len(self.leds_3d)} ({backend_info}scan range: {self._led_count}) "
+                    f"in {sfm_time:.2f} seconds (post process took {post_time:.2f} seconds)"
                 )
 
             needs_initial_reconstruction = False

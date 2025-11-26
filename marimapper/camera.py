@@ -37,6 +37,9 @@ class Camera:
         if not self.device.isOpened():
             raise RuntimeError(f"Failed to connect to camera {device_id}")
 
+        camera_name = self.device.getBackendName()
+        logger.warning(f"Camera {device_id}: {camera_name}")
+
         self.default_settings = CameraSettings(self)
 
     def reset(self):

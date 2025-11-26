@@ -1,8 +1,9 @@
 from multiprocessing import get_logger
 import time
-import sys
-import os
 import socket
+import json
+import base64
+from pathlib import Path
 
 # see https://github.com/TheMariday/marimapper/issues/78
 # why this is a UserWarning and not a DepreciationWarning is beyond me...
@@ -76,7 +77,7 @@ class Backend:
                     logger.info(f"Found PixelBlaze at {pixelblaze_ip}")
                 else:
                     logger.error("No PixelBlazes found. Specify IP with --server")
-                    sys.exit(1)
+                    raise RuntimeError("No PixelBlazes found on network")
 
         logger.info(f"PixelBlaze server: {pixelblaze_ip}")
 
@@ -87,19 +88,42 @@ class Backend:
                 f"Pixelblaze backend failed to start due as {pixelblaze_ip} is not a valid IP address"
             )
 
-        self.pb = pixelblaze.Pixelblaze(pixelblaze_ip)
         try:
-            self.pb.setActivePatternByName(
-                "marimapper"
-            )  # Need to install marimapper.js to your pixelblaze
-        except TypeError as e:
-            if "'NoneType' has no len()" in str(e):
-                raise RuntimeError(
-                    "Pixelblaze may have failed to find the effect 'marimapper'. "
-                    "Have you uploaded marimapper.epe to your controller?"
-                )
-            else:
-                raise e
+            logger.info(f"Connecting to PixelBlaze at {pixelblaze_ip}...")
+            self.pb = pixelblaze.Pixelblaze(pixelblaze_ip)
+        except ConnectionResetError:
+            logger.error("\n\n")
+            logger.error(f"❌ Connection refused by PixelBlaze at {pixelblaze_ip}")
+            logger.error("❌ PixelBlaze may be unresponsive - try restarting it")
+            logger.error("\n\n")
+            raise RuntimeError(f"PixelBlaze at {pixelblaze_ip} refused connection")
+        except Exception as e:
+            logger.error("\n\n")
+            logger.error(f"❌ Failed to connect to PixelBlaze: {e}")
+            logger.error("\n\n")
+            raise RuntimeError(f"Failed to connect to PixelBlaze: {e}")
+
+        logger.info("Checking PixelBlaze health...")
+        if not self._check_health():
+            raise RuntimeError("\n\n\n**** ❌ Pattern not found, upload this repo's marimapper.epe to your PixelBlaze in its UI\n\n\n")
+
+        self.pb.setActivePatternByName("marimapper")
+
+    def _check_health(self):
+        try:
+            patterns = self.pb.getPatternList()
+            logger.info(f"Found {len(patterns)} pattern(s) on PixelBlaze")
+
+            for _, pattern_name in patterns.items():
+                if pattern_name.lower() == "marimapper":
+                    logger.info("Marimapper pattern found")
+                    return True
+
+            logger.error("Marimapper pattern not found in pattern list")
+            return False
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return False
 
     def get_led_count(self):
         pixel_count = self.pb.getPixelCount()
@@ -117,3 +141,25 @@ class Backend:
 
     def set_current_map(self, pixelmap_name: str):
         self.pb.setActivePatternByName(pixelmap_name)
+    
+    def upload_pattern(self):
+            epe_path = Path(__file__).parent / "marimapper.epe"
+
+            with open(epe_path, 'r', encoding='utf-8-sig') as f:
+                epe_data = f.read()
+
+            logger.info("Loading EPE file...")
+            epe = pixelblaze.EPE.fromBytes(epe_data.encode('utf-8'))
+            source_code = epe.sourceCode
+            preview_image_b64 = epe.previewImage
+            preview_image = base64.b64decode(preview_image_b64) if isinstance(preview_image_b64, str) else preview_image_b64
+
+            logger.info("Compiling pattern...")
+            bytecode = self.pb.compilePattern(source_code)
+            logger.info("Compilation complete")
+
+            sources_json = json.dumps({"main": source_code})
+
+            logger.info("Saving pattern to PixelBlaze...")
+            self.pb.savePattern(previewImage=preview_image, sourceCode=sources_json, byteCode=bytecode)
+            logger.info("Pattern uploaded successfully")
