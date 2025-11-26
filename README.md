@@ -158,7 +158,7 @@ Also good if you're just curious as to why *x* is taking so long!
 
 Clone this repo locally (and recursively, with test data), install, and run tests (first time is slower):
 ```bash
-git clone --recursive https://github.com/TheMariday/marimapper
+git clone --recurse-submodules https://github.com/TheMariday/marimapper
 cd marimapper
 uv venv && source .venv/bin/activate
 uv pip install -e '.[develop]'
