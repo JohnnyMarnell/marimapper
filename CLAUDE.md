@@ -120,16 +120,121 @@ Backend registration happens in `backends/backend_utils.py`:
 
 Supported backends: fadecandy, fcmega, wled, pixelblaze, artnet, custom, dummy
 
-### SFM Reconstruction Flow
-1. Camera captures LED positions across multiple views (minimum 2 views required)
-2. 2D positions stored as `LED2D` objects with view IDs
-3. `sfm()` function creates temporary database, populates it with camera model and LED observations
-4. pycolmap's `incremental_mapping()` reconstructs 3D positions
-5. Results converted to `LED3D` objects with positions and normals
-6. Gap filling/interpolation applied based on `--interpolation-max-fill` and `--interpolation-max-error` parameters
+### SFM Reconstruction Flow: How 2D Scans Become 3D Maps
+
+MariMapper uses **Structure-from-Motion (SFM)**, a computer vision technique that reconstructs 3D structure from 2D images taken from different viewpoints. This is the same math used in photogrammetry, autonomous vehicles, and 3D scanning.
+
+#### The Multi-View Reconstruction Process
+
+**Step 1: Data Collection (Multiple 2D Scans)**
+- Each scan creates one `led_map_2d_<timestamp>.csv` file
+- Each file contains 2D pixel coordinates (u, v) for each detected LED
+- Each file represents one "view" (camera position/angle)
+- Files are loaded in alphabetical order, assigned sequential view IDs (0, 1, 2, ...)
+
+**Step 2: Database Population (`database_populator.py`)**
+- Creates COLMAP database with camera model (default: radial model, 60° FOV)
+- Converts normalized coordinates (0-1) to pixel coordinates (×2000)
+- Registers each LED detection as a "keypoint" in its respective view
+- Computes "two-view geometry": which LEDs appear in pairs of views
+  - Example: If LED 19 appears in view 0 and view 5, creates correspondence [19, 19]
+  - This is critical: **LEDs must be visible in overlapping views to be reconstructed**
+
+**Step 3: Incremental Mapping (`sfm.py` → pycolmap)**
+
+This is where the math happens. COLMAP performs:
+
+1. **Camera Pose Estimation** (solving the multi-view geometry problem):
+   - Finds relative camera positions and orientations for all views
+   - Uses RANSAC to robustly estimate camera poses despite noise
+   - Requires sufficient overlap between views (controlled by `min_num_matches = 9`)
+   - **Critical constraint**: Views must form a connected graph through shared LEDs
+
+2. **Triangulation** (computing 3D positions):
+   - For each LED visible in 2+ views with known camera poses:
+     - Projects rays from each camera through the 2D pixel coordinates
+     - Finds the 3D point where rays intersect (triangulation)
+     - Minimizes reprojection error across all views
+   - Settings:
+     - `ignore_two_view_tracks = False`: Allows reconstruction from just 2 views
+     - `mapper.init_min_num_inliers = 50`: Initial reconstruction needs ≥50 matches
+     - `mapper.abs_pose_min_num_inliers = 9`: Adding new views needs ≥9 matches
+
+3. **Bundle Adjustment** (refinement):
+   - Simultaneously optimizes camera poses and 3D LED positions
+   - Minimizes total reprojection error across all views
+   - Results stored in `points3D.bin` (3D coordinates, error, view associations)
+
+**Step 4: Extraction (`model.py`)**
+- Reads COLMAP's binary output (`points3D.bin`, `images.bin`)
+- Converts to `LED3D` objects with positions, normals, and view associations
+- The LED ID comes from `point2D_idxs[0]` (the keypoint index)
+
+**Step 5: Post-Processing (`sfm_process.py`)**
+- `remove_duplicates()`: Merges LEDs with same ID from multiple COLMAP maps
+- `rescale()`: Normalizes 3D model to unit inter-LED distance
+- `recenter()`: Centers model at origin
+- `fill_gaps()`: Interpolates missing LEDs between neighbors (if enabled)
+- `estimate_normals()`: Computes surface normals using Open3D
+
+**Step 6: Output**
+- Single `led_map_3d.csv`: Contains all reconstructed LEDs with x,y,z, normals, error
+
+#### Why LEDs Fail to Reconstruct: The Case of LED 19
+
+**Common Failure Modes:**
+
+1. **Disconnected View Graph** (Most Common)
+   - LED appears in views 0-5 and views 20-25, but no LED connects these clusters
+   - COLMAP can't determine relative camera poses between disconnected view sets
+   - **Solution**: Add intermediate scans to bridge the gap
+
+2. **Insufficient Parallax**
+   - LED visible in multiple views, but camera moved too little (< 5°)
+   - Triangulation becomes ill-conditioned (rays nearly parallel)
+   - **Solution**: Move camera 6-20° between scans
+
+3. **High Reprojection Error**
+   - LED detected, but 2D positions inconsistent across views (> 2 pixels error)
+   - Indicates detection noise or LED movement between scans
+   - **Solution**: Improve lighting, reduce exposure, ensure LEDs don't move
+
+4. **Below Inlier Threshold**
+   - LED appears in views, but during RANSAC it's classified as outlier
+   - Happens when most correspondences are good, but this LED is noisy
+   - **Solution**: More scans with consistent detection quality
+
+**Investigating Your LED 19 Case:**
+
+Your LED 19 appears in 10 views (timestamps show two clusters):
+- **Cluster 1**: Views 003030-003157 (6 scans, ~2 minutes)
+- **Cluster 2**: Views 075618-081306 (4 scans, ~4 hours later)
+
+**Likely cause**: The 4-hour gap suggests these are two separate scanning sessions. If the views in Cluster 1 and Cluster 2 don't share enough LEDs with the main reconstruction graph, LED 19 can't be triangulated even though it's detected 10 times.
+
+**The Math Behind Why This Fails:**
+
+COLMAP builds the reconstruction incrementally:
+1. Starts with initial view pair (must share ≥50 LEDs)
+2. Adds views one at a time (must share ≥9 LEDs with existing model)
+3. Triangulates new points visible in newly added views
+
+If LED 19's views were never added to the main reconstruction (because they lacked sufficient overlap with other views), LED 19 can't be triangulated—even if it has many 2D detections.
+
+**Diagnostic Commands:**
+```bash
+# Count how many times each LED appears in 2D maps
+for i in {0..49}; do
+  count=$(grep "^$i," led_map_2d_*.csv 2>/dev/null | wc -l)
+  echo "LED $i: $count detections"
+done | sort -t':' -k2 -n
+
+# Find which views contain LED 19
+grep "^19," led_map_2d_*.csv | sed 's/.*\(20[0-9]\{6\}-[0-9]\{6\}\).*/\1/'
+```
 
 Key files:
-- `sfm.py`: Core reconstruction algorithm
+- `sfm.py`: Core reconstruction algorithm, COLMAP interface
 - `database_populator.py`: Creates COLMAP database from 2D observations
 - `model.py`: Converts COLMAP binary output to LED3D objects
 - `led.py`: LED2D/LED3D data structures and utilities
@@ -246,6 +351,7 @@ Final output:
 | `sfm managed to reconstruct 31 leds in map 0` | pycolmap successfully calculated 3D positions for 31 LEDs. "map 0" is the primary reconstruction (COLMAP can produce multiple disconnected maps). | `sfm.py:69` |
 | `filled 1 LEDs` | Gap-filling interpolated 1 missing LED between two reconstructed LEDs based on distance constraints (`--interpolation-max-fill` and `--interpolation-max-error`). | `led.py:279` |
 | `Reconstructed X (backend reported: Y, scan range: Z) in A seconds (post process took B seconds)` | **X** = LEDs successfully reconstructed (KEY NUMBER!), **Y** = actual LED count from backend (e.g., "Pixelblaze reports 50 pixels"), **Z** = scan range (end - start, default 10000), **A** = pycolmap reconstruction time, **B** = post-processing time. Compare X to Y to see reconstruction success rate. Appears at startup if existing LED files found (reconstructing previous scans) and after each new scan. | `sfm_process.py:185` |
+| `Missing from 3D map: 19, 28, 35 ... (5 more)` | Shows which LED indices (0 to backend_led_count-1) are missing from 3D reconstruction. Lists up to 20 indices, then shows count of remaining. Appears after reconstruction completes. Use this to identify which LEDs need more scans or have detection issues. | `sfm_process.py:203` |
 | `Scan X has overlap of Y points or Z%` | New scan shares Y LED detections with existing model (Z% of new scan). <50% overlap may cause scan to be ignored. | `sfm.py` |
 | `Warning! Scan X has very low overlap...` | Camera moved too far between scans (<10% LEDs visible in both views). This scan may be ignored. Add intermediate scans to bridge the gap, or reposition camera closer to previous view. | `sfm.py` |
 

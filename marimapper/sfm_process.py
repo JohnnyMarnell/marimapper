@@ -186,6 +186,23 @@ class SFM(Process):
                     f"in {sfm_time:.2f} seconds (post process took {post_time:.2f} seconds)"
                 )
 
+                # Report missing LED indices
+                if self._backend_led_count > 0:
+                    reconstructed_ids = set(led.led_id for led in self.leds_3d)
+                    expected_ids = set(range(self._backend_led_count))
+                    missing_ids = sorted(expected_ids - reconstructed_ids)
+
+                    if missing_ids:
+                        # Format: show up to 20 missing IDs, then "... (N more)"
+                        if len(missing_ids) <= 20:
+                            missing_str = ", ".join(map(str, missing_ids))
+                        else:
+                            missing_str = ", ".join(map(str, missing_ids[:20])) + f" ... ({len(missing_ids) - 20} more)"
+
+                        print_without_hiding_scan_message(
+                            f"Missing from 3D map: {missing_str}"
+                        )
+
             needs_initial_reconstruction = False
 
             if print_overlap and len(self.leds_3d) > 0:
