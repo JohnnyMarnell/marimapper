@@ -3,6 +3,7 @@
 - Mention PB.md has full end to end example (not just PB)
 - Add screensharts
 - Add command examples
+- Add Camo Studio help (Brightness)
 
 ![logo.png](docs/images/logo.png)
 
