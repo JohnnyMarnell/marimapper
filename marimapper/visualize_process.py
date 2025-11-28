@@ -45,26 +45,41 @@ class VisualiseProcess(Process):
         logger.debug("Renderer3D process starting")
         initialised = False
 
-        while not self._exit_event.is_set():
+        try:
+            while not self._exit_event.is_set():
 
-            if not self._input_queue.empty():
-                leds = self._input_queue.get()
-                if len(leds) < 9:
-                    continue
+                if not self._input_queue.empty():
+                    leds = self._input_queue.get()
+                    if len(leds) < 9:
+                        continue
 
-                if not initialised:
-                    self.initialise_visualiser__()
-                    self.reload_geometry__(leds, True)
-                    initialised = True
+                    if not initialised:
+                        self.initialise_visualiser__()
+                        self.reload_geometry__(leds, True)
+                        initialised = True
+                    else:
+                        self.reload_geometry__(leds)
+
+                if initialised:
+                    self._vis.poll_events()
+                    self._vis.update_renderer()
+                    time.sleep(1 / 60)
                 else:
-                    self.reload_geometry__(leds)
+                    time.sleep(1)
 
-            if initialised:
-                self._vis.poll_events()
-                self._vis.update_renderer()
-                time.sleep(1 / 60)
-            else:
-                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Visualiser process interrupted by user")
+        except Exception as e:
+            logger.error(f"Visualiser process crashed: {e}", exc_info=True)
+            raise  # Re-raise so exitcode != 0
+        finally:
+            logger.info("Visualiser process closing")
+            if initialised and self._vis is not None:
+                try:
+                    self._vis.destroy_window()
+                    logger.debug("Visualiser window destroyed")
+                except Exception as e:
+                    logger.error(f"Error destroying visualiser window: {e}")
 
     def initialise_visualiser__(self):
         logger.debug("Renderer3D process initialising visualiser")

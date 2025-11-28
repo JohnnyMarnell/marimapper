@@ -101,131 +101,139 @@ class SFM(Process):
         self._exit_event.set()
 
     def run(self):
+        try:
+            needs_initial_reconstruction = len(self.leds_2d) > 0
+            update_info = True
+            while not self._exit_event.is_set():
 
-        needs_initial_reconstruction = len(self.leds_2d) > 0
-        update_info = True
-        while not self._exit_event.is_set():
+                update_sfm = False
+                print_overlap = False
+                print_reconstructed = False
 
-            update_sfm = False
-            print_overlap = False
-            print_reconstructed = False
+                while not self._input_queue.empty():
 
-            while not self._input_queue.empty():
+                    control, data = self._input_queue.get()
+                    if control == DetectionControlEnum.DETECT:
+                        led2d = data
+                        self.leds_2d.append(led2d)
+                        update_sfm = True
+                        print_reconstructed = False
 
-                control, data = self._input_queue.get()
-                if control == DetectionControlEnum.DETECT:
-                    led2d = data
-                    self.leds_2d.append(led2d)
-                    update_sfm = True
-                    print_reconstructed = False
+                    if control == DetectionControlEnum.DONE:
+                        print_overlap = True
+                        print_reconstructed = True
+                        update_info = True
+                    if control == DetectionControlEnum.DELETE:
+                        view_id = data
+                        self.leds_2d = [
+                            led for led in self.leds_2d if led.view_id != view_id
+                        ]
+                        update_sfm = True
 
-                if control == DetectionControlEnum.DONE:
-                    print_overlap = True
-                    print_reconstructed = True
-                    update_info = True
-                if control == DetectionControlEnum.DELETE:
-                    view_id = data
-                    self.leds_2d = [
-                        led for led in self.leds_2d if led.view_id != view_id
-                    ]
-                    update_sfm = True
+                start_time = 0
+                end_sfm_time = 0
+                end_post_process_time = 0
 
-            start_time = 0
-            end_sfm_time = 0
-            end_post_process_time = 0
+                if (update_sfm or needs_initial_reconstruction) and len(self.leds_2d) > 0:
 
-            if (update_sfm or needs_initial_reconstruction) and len(self.leds_2d) > 0:
-
-                start_time = time.time()
-                self.leds_3d = sfm(
-                    self.leds_2d,
-                    camera_model=self._camera_model,
-                    camera_fov=self._camera_fov,
-                )
-                end_sfm_time = time.time()
-
-                if len(self.leds_3d) > 0:
-                    rescale(self.leds_3d)
-
-                    fill_gaps(
-                        self.leds_3d,
-                        min_distance=1 - self.interpolation_max_error,
-                        max_distance=1 + self.interpolation_max_error,
-                        max_missing=self.interpolation_max_fill,
+                    start_time = time.time()
+                    self.leds_3d = sfm(
+                        self.leds_2d,
+                        camera_model=self._camera_model,
+                        camera_fov=self._camera_fov,
                     )
+                    end_sfm_time = time.time()
 
-                    recenter(self.leds_3d)
+                    if len(self.leds_3d) > 0:
+                        rescale(self.leds_3d)
 
-                    add_normals(self.leds_3d)
-
-                    for queue in self._output_queues:
-                        queue.put(self.leds_3d)
-
-                if update_info:
-                    update_info = False
-                    led_info = {}
-
-                    for led in combine_2d_3d(self.leds_2d, self.leds_3d):
-                        led_info[led.led_id] = led.get_info()
-
-                    for queue in self._output_info_queues:
-                        queue.put(led_info)
-
-                end_post_process_time = time.time()
-
-            if (print_reconstructed or needs_initial_reconstruction) and len(
-                self.leds_3d
-            ) > 0:
-
-                sfm_time = end_sfm_time - start_time
-                post_time = end_post_process_time - end_sfm_time
-
-                backend_info = f"backend reported: {self._backend_led_count}, " if self._backend_led_count > 0 else ""
-                print_without_hiding_scan_message(
-                    f"Reconstructed {len(self.leds_3d)} ({backend_info}scan range: {self._led_count}) "
-                    f"in {sfm_time:.2f} seconds (post process took {post_time:.2f} seconds)"
-                )
-
-                # Report missing LED indices
-                if self._backend_led_count > 0:
-                    reconstructed_ids = set(led.led_id for led in self.leds_3d)
-                    expected_ids = set(range(self._backend_led_count))
-                    missing_ids = sorted(expected_ids - reconstructed_ids)
-
-                    if missing_ids:
-                        # Format: show up to 20 missing IDs, then "... (N more)"
-                        if len(missing_ids) <= 20:
-                            missing_str = ", ".join(map(str, missing_ids))
-                        else:
-                            missing_str = ", ".join(map(str, missing_ids[:20])) + f" ... ({len(missing_ids) - 20} more)"
-
-                        print_without_hiding_scan_message(
-                            f"Missing from 3D map: {missing_str}"
+                        fill_gaps(
+                            self.leds_3d,
+                            min_distance=1 - self.interpolation_max_error,
+                            max_distance=1 + self.interpolation_max_error,
+                            max_missing=self.interpolation_max_fill,
                         )
 
-            needs_initial_reconstruction = False
+                        recenter(self.leds_3d)
 
-            if print_overlap and len(self.leds_3d) > 0:
-                last_view_id = last_view(self.leds_2d)
-                overlap, overlap_percentage = get_overlap_and_percentage(
-                    self.leds_2d, self.leds_3d, last_view_id
-                )
+                        add_normals(self.leds_3d)
 
-                logger.debug(
-                    f"Scan {last_view_id} has overlap of {overlap} or {overlap_percentage}%"
-                )
+                        for queue in self._output_queues:
+                            queue.put(self.leds_3d)
 
-                if overlap < 10:
+                    if update_info:
+                        update_info = False
+                        led_info = {}
+
+                        for led in combine_2d_3d(self.leds_2d, self.leds_3d):
+                            led_info[led.led_id] = led.get_info()
+
+                        for queue in self._output_info_queues:
+                            queue.put(led_info)
+
+                    end_post_process_time = time.time()
+
+                if (print_reconstructed or needs_initial_reconstruction) and len(
+                    self.leds_3d
+                ) > 0:
+
+                    sfm_time = end_sfm_time - start_time
+                    post_time = end_post_process_time - end_sfm_time
+
+                    backend_info = f"backend reported: {self._backend_led_count}, " if self._backend_led_count > 0 else ""
                     print_without_hiding_scan_message(
-                        f"Warning! Scan {last_view_id} has a very low overlap with the reconstructed model "
-                        f"(only {overlap} points) and therefore may be disregarded when reconstructing "
-                        "unless scans are added between this and the prior scan"
-                    )
-                if overlap_percentage < 50:
-                    print_without_hiding_scan_message(
-                        f"Warning! Scan {last_view_id} has a low overlap with the reconstructed model "
-                        f"(only {overlap_percentage}%) and therefore may be disregarded when reconstructing "
-                        "unless scans are added between this and the prior scan"
+                        f"Reconstructed {len(self.leds_3d)} ({backend_info}scan range: {self._led_count}) "
+                        f"in {sfm_time:.2f} seconds (post process took {post_time:.2f} seconds)"
                     )
 
-            time.sleep(1)
+                    # Report missing LED indices
+                    if self._backend_led_count > 0:
+                        reconstructed_ids = set(led.led_id for led in self.leds_3d)
+                        expected_ids = set(range(self._backend_led_count))
+                        missing_ids = sorted(expected_ids - reconstructed_ids)
+
+                        if missing_ids:
+                            # Format: show up to 20 missing IDs, then "... (N more)"
+                            if len(missing_ids) <= 20:
+                                missing_str = ", ".join(map(str, missing_ids))
+                            else:
+                                missing_str = ", ".join(map(str, missing_ids[:20])) + f" ... ({len(missing_ids) - 20} more)"
+
+                            print_without_hiding_scan_message(
+                                f"Missing from 3D map: {missing_str}"
+                            )
+
+                needs_initial_reconstruction = False
+
+                if print_overlap and len(self.leds_3d) > 0:
+                    last_view_id = last_view(self.leds_2d)
+                    overlap, overlap_percentage = get_overlap_and_percentage(
+                        self.leds_2d, self.leds_3d, last_view_id
+                    )
+
+                    logger.debug(
+                        f"Scan {last_view_id} has overlap of {overlap} or {overlap_percentage}%"
+                    )
+
+                    if overlap < 10:
+                        print_without_hiding_scan_message(
+                            f"Warning! Scan {last_view_id} has a very low overlap with the reconstructed model "
+                            f"(only {overlap} points) and therefore may be disregarded when reconstructing "
+                            "unless scans are added between this and the prior scan"
+                        )
+                    if overlap_percentage < 50:
+                        print_without_hiding_scan_message(
+                            f"Warning! Scan {last_view_id} has a low overlap with the reconstructed model "
+                            f"(only {overlap_percentage}%) and therefore may be disregarded when reconstructing "
+                            "unless scans are added between this and the prior scan"
+                        )
+
+                time.sleep(1)
+
+        except KeyboardInterrupt:
+            logger.info("SFM process interrupted by user")
+        except Exception as e:
+            logger.error(f"SFM process crashed: {e}", exc_info=True)
+            raise  # Re-raise so exitcode != 0
+        finally:
+            logger.info("SFM process closing")

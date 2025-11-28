@@ -1,4 +1,3 @@
-import atexit
 import cv2
 from multiprocessing import get_logger
 
@@ -33,12 +32,6 @@ class Camera:
                 logger.debug(
                     f"Connected to device {device_id} with capture method {capture_method}"
                 )
-                def force_release():
-                    if self.device.isOpened():
-                        print("⚠️ Force releasing camera via atexit...", flush=True)
-                        self.device.release()
-                
-                atexit.register(force_release)
                 break
 
         if not self.device.isOpened():
@@ -111,3 +104,10 @@ class Camera:
             raise Exception("Failed to read image")
 
         return image
+
+    def release(self):
+        """Explicitly release camera resources"""
+        if self.device.isOpened():
+            logger.info(f"Releasing camera {self.device_id}")
+            self.device.release()
+            logger.debug(f"Camera {self.device_id} released")

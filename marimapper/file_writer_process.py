@@ -32,32 +32,46 @@ class FileWriterProcess(Process):
         return self._base_path / f"led_map_2d_{string_time}.csv"
 
     def run(self):
-        views: dict[int, list[LED2D]] = {}
-        view_id_to_filename: dict[int, Path] = {}
+        from multiprocessing import get_logger
+        logger = get_logger()
 
-        while not self._exit_event.is_set():
+        try:
+            views: dict[int, list[LED2D]] = {}
+            view_id_to_filename: dict[int, Path] = {}
 
-            if not self._input_queue_3d.empty():
-                leds = self._input_queue_3d.get()
-                write_3d_leds_to_file(leds, self._base_path / "led_map_3d.csv")
+            while not self._exit_event.is_set():
 
-            if not self._input_queue_2d.empty():
-                control, data = self._input_queue_2d.get()
+                if not self._input_queue_3d.empty():
+                    leds = self._input_queue_3d.get()
+                    write_3d_leds_to_file(leds, self._base_path / "led_map_3d.csv")
 
-                if control == DetectionControlEnum.DONE:
-                    view_id = data
-                    write_2d_leds_to_file(views[view_id], view_id_to_filename[view_id])
+                if not self._input_queue_2d.empty():
+                    control, data = self._input_queue_2d.get()
 
-                if control == DetectionControlEnum.DETECT:
-                    led = data
+                    if control == DetectionControlEnum.DONE:
+                        view_id = data
+                        write_2d_leds_to_file(views[view_id], view_id_to_filename[view_id])
 
-                    if led.view_id not in view_id_to_filename:
-                        view_id_to_filename[led.view_id] = self.get_new_filename()
-                        views[led.view_id] = []
+                    if control == DetectionControlEnum.DETECT:
+                        led = data
 
-                    views[led.view_id].append(led)
+                        if led.view_id not in view_id_to_filename:
+                            view_id_to_filename[led.view_id] = self.get_new_filename()
+                            views[led.view_id] = []
 
-                if control == DetectionControlEnum.DELETE:
-                    view_id = data
-                    del views[view_id]
-                    del view_id_to_filename[view_id]
+                        views[led.view_id].append(led)
+
+                    if control == DetectionControlEnum.DELETE:
+                        view_id = data
+                        del views[view_id]
+                        del view_id_to_filename[view_id]
+
+                time.sleep(0.1)  # Small sleep to prevent busy-waiting
+
+        except KeyboardInterrupt:
+            logger.info("FileWriter process interrupted by user")
+        except Exception as e:
+            logger.error(f"FileWriter process crashed: {e}", exc_info=True)
+            raise  # Re-raise so exitcode != 0
+        finally:
+            logger.info("FileWriter process closing")

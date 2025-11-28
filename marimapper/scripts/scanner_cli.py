@@ -7,6 +7,8 @@ warnings.simplefilter(
 import multiprocessing
 import argparse
 import logging
+import signal
+import sys
 from marimapper.scripts.arg_tools import (
     parse_common_args,
     add_common_args,
@@ -47,22 +49,45 @@ def main():
 
     backend_factory = backend_factories[args.backend](args)
 
-    scanner = Scanner(
-        args.dir,
-        args.device,
-        args.exposure,
-        args.threshold,
-        backend_factory,
-        args.start,
-        args.end,
-        args.interpolation_max_fill if args.interpolation_max_fill != -1 else 10000,
-        args.interpolation_max_error if args.interpolation_max_error != -1 else 10000,
-        args.disable_movement_check,
-        args.camera_model,
-    )
+    scanner = None
 
-    scanner.mainloop()
-    scanner.close()
+    # Signal handler for clean shutdown
+    def signal_handler(sig, frame):
+        sig_name = "SIGINT" if sig == signal.SIGINT else "SIGTERM"
+        logger.warning(f"\nReceived {sig_name}, cleaning up...")
+        if scanner is not None:
+            scanner.close()
+        sys.exit(0)
+
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        scanner = Scanner(
+            args.dir,
+            args.device,
+            args.exposure,
+            args.threshold,
+            backend_factory,
+            args.start,
+            args.end,
+            args.interpolation_max_fill if args.interpolation_max_fill != -1 else 10000,
+            args.interpolation_max_error if args.interpolation_max_error != -1 else 10000,
+            args.disable_movement_check,
+            args.camera_model,
+        )
+
+        scanner.mainloop()
+
+    except KeyboardInterrupt:
+        logger.warning("\nInterrupted by user")
+    except Exception as e:
+        logger.error(f"Scanner failed: {e}", exc_info=True)
+        raise
+    finally:
+        if scanner is not None:
+            scanner.close()
 
 
 if __name__ == "__main__":

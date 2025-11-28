@@ -136,15 +136,33 @@ class Scanner:
     def close(self):
         logger.debug("scanner closing")
 
+        # Set exit events
         self.detector.stop()
         self.sfm.stop()
         self.renderer3d.stop()
         self.file_writer.stop()
 
-        join_with_warning(self.detector, "detector")
-        join_with_warning(self.sfm, "SFM")
-        join_with_warning(self.file_writer, "File Writer")
-        join_with_warning(self.renderer3d, "Visualiser")
+        # Try graceful shutdown first (5 second timeout per process)
+        processes = [
+            (self.detector, "detector"),
+            (self.sfm, "SFM"),
+            (self.file_writer, "File Writer"),
+            (self.renderer3d, "Visualiser"),
+        ]
+
+        for process, name in processes:
+            join_with_warning(process, name, timeout=5)
+
+            # Force terminate if still alive
+            if process.is_alive():
+                logger.warning(f"{name} didn't stop gracefully, terminating...")
+                process.terminate()
+                process.join(timeout=2)
+
+            if process.is_alive():
+                logger.error(f"{name} won't die, killing...")
+                process.kill()
+                process.join()
 
         logger.debug("scanner closed")
 
