@@ -103,11 +103,11 @@ class Backend:
             logger.error("\n\n")
             raise RuntimeError(f"Failed to connect to PixelBlaze: {e}")
 
-        logger.info("Checking PixelBlaze health...")
-        if not self._check_health():
-            raise RuntimeError("\n\n\n**** ❌ Pattern not found, upload this repo's marimapper.epe to your PixelBlaze in its UI\n\n\n")
+        # logger.info("Checking PixelBlaze health...")
+        # if not self._check_health():
+        #     raise RuntimeError("\n\n\n**** ❌ Pattern not found, upload this repo's marimapper.epe to your PixelBlaze in its UI\n\n\n")
 
-        self.pb.setActivePatternByName("marimapper")
+        self.set_mapper_pattern()
 
     def _check_health(self):
         try:
@@ -139,8 +139,11 @@ class Backend:
             raise RuntimeError("Pixelblaze Backend failed to upload map coordinates.")
         self.pb.wsSendJson({"mapperFit": 0})
 
-    def set_current_map(self, pixelmap_name: str):
-        self.pb.setActivePatternByName(pixelmap_name)
+    def set_mapper_pattern(self):
+        with open(Path(__file__).parent / "marimapper.js", 'r', encoding='utf-8-sig') as f:
+            source_code = f.read()
+        bytecode = self.pb.compilePattern(source_code)
+        self.pb.sendPatternToRenderer(bytecode)
     
     def upload_pattern(self):
             epe_path = Path(__file__).parent / "marimapper.epe"
